@@ -1,3 +1,4 @@
 # ComputerVisionFinalProject
 
-This is a rock paper scissors game.
+Project Idea: Rock Paper Scissors game
+
