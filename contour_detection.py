@@ -86,7 +86,7 @@ def draw_convex_hull_on_frame(frame, contour, box, color, thickness):
 
 def count_defects(contour, depth_threshold=8000):
     if contour is None:
-        return
+        return 0
     
     # We set returnPoints = False so that it fives the indices of hull points instead of actual points.
     # Because cv.convexityDefects() needs hull indices, not hull coordinates.

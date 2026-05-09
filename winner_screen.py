@@ -37,5 +37,5 @@ def show_winner_screen(photo_path, username):
         key = cv.waitKey(30) & 0xFF
 
         if key == ord("r"):
-            cv.destrouWindow(window_name)
+            cv.destroyWindow(window_name)
             return
