@@ -4,6 +4,9 @@ from contour_detection import find_hand_contour, draw_contour_on_frame, draw_cen
 from gesture_detection import draw_gesture_on_frame
 from game_logic import decide_winner
 import time
+from face_detection import detect_faces, get_largest_face, draw_face_box, crop_face
+from photo_editor import open_photo_editor
+from winner_screen import show_winner_screen
 
 def create_background_mask(roi, background_roi):
     # If no background has been saved yet, then we would return a fully black mask
@@ -90,6 +93,8 @@ player2_background = None
 # The outline of the hand
 use_background_mode = False
 
+# Variables for Game Logic
+
 game_started = False
 
 countdown_started = False
@@ -100,6 +105,12 @@ result_locked = False
 locked_player1_gesture = "unknown"
 locked_player2_gesture = "unknown"
 locked_winner_text = "Waiting"
+
+# Variables for face detection
+current_face_box = None
+winner_photo_path = None
+
+
 
 while True:
     # Read one frame from the camera
@@ -227,7 +238,20 @@ while True:
             cv.putText(display_frame, f"Locked P1: {locked_player1_gesture}", (player1_x, player1_y + box_size + 75), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
             cv.putText(display_frame, f"Locked P2: {locked_player2_gesture}", (player2_x, player2_y + box_size + 75), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-    cv.putText(display_frame, winner_text, (width // 2 - 170, 70), cv.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)        
+    face_photo_mode = result_locked and locked_winner_text in ["Player 1 Wins", "Player 2 Wins"]
+    
+    if face_photo_mode:
+        display_frame = raw_frame.copy()
+        faces = detect_faces(raw_frame)
+        current_face_box = get_largest_face(faces)
+        if current_face_box is not None:
+            x, y, w, h = current_face_box
+            cv.rectangle(display_frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+            cv.putText(display_frame, "Winner!!!", (width // 2 - 200, height -100), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+            cv.putText(display_frame, "F: take face photo | P: take full photo | R: restart game", (width // 2 - 200, height -60), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+    else:
+        cv.putText(display_frame, winner_text, (width//2 - 170, 70), cv.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
+  
     cv.imshow(window_name, display_frame)
 
     key = cv.waitKey(1) & 0xFF
@@ -247,6 +271,9 @@ while True:
         locked_player2_gesture = "unknown"
         locked_winner_text = "Waiting"
 
+        current_face_box = None
+        winner_photo_path = None
+
     if key == ord("s"):
         if use_background_mode:
             game_started = True
@@ -257,6 +284,72 @@ while True:
             locked_player2_gesture = "unknown"
             locked_winner_text = "Waiting"
 
+            current_face_box = None
+            winner_photo_path = None
+
+    if key == ord("p"):
+        if result_locked and locked_winner_text in ["Player 1 Wins", "Player 2 Wins"]:
+            full_photo = raw_frame.copy()
+            
+            winner_photo_path, restart_requested = open_photo_editor(full_photo, save_path="winner_full_photo.jpg")
+
+            if restart_requested:
+                game_started = False
+                result_locked = False
+                countdown_started = False
+
+                locked_player1_gesture = "unknown"
+                locked_player2_gesture = "unknown"
+                locked_winner_text = "Waiting"
+
+                current_face_box = None
+                winner_photo_path = None
+            elif winner_photo_path is not None:
+                show_winner_screen(winner_photo_path)
+                game_started = False
+                result_locked = False
+                countdown_started = False
+
+                locked_player1_gesture = "unknown"
+                locked_player2_gesture = "unknown"
+                locked_winner_text = "Waiting"
+
+                current_face_box = None
+                winner_photo_path = None
+
+    if key == ord("f"):
+        if result_locked and locked_winner_text in ["Player 1 Wins", "Player 2 Wins"]:
+            face_photo = crop_face(raw_frame, current_face_box, padding=30)
+
+            if face_photo is None:
+                print("No face detected")
+            else:
+                winner_photo_path, restart_requested = open_photo_editor(face_photo, save_path="winner_face_photo.jpg")
+
+                if restart_requested:
+                    game_started = False
+                    result_locked = False
+                    countdown_started = False
+
+                    locked_player1_gesture = "unknown"
+                    locked_player2_gesture = "unknown"
+                    locked_winner_text = "Waiting"
+
+                    current_face_box = None
+                    winner_photo_path = None
+                elif winner_photo_path is not None:
+                    show_winner_screen(winner_photo_path)
+                    game_started = False
+                    result_locked = False
+                    countdown_started = False
+
+                    locked_player1_gesture = "unknown"
+                    locked_player2_gesture = "unknown"
+                    locked_winner_text = "Waiting"
+
+                    current_face_box = None
+                    winner_photo_path = None
+
     if key == ord("r"):
         game_started = False
         result_locked = False
@@ -265,6 +358,9 @@ while True:
         locked_player1_gesture = "unknown"
         locked_player2_gesture = "unknown"
         locked_winner_text = "Waiting"
+
+        current_face_box = None
+        winner_photo_path = None
 
 
     if key == 27:
