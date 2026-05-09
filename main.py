@@ -1,5 +1,7 @@
 import cv2 as cv
 import numpy as np
+from contour_detection import find_hand_contour, draw_contour_on_frame, draw_centroid_on_frame, draw_convex_hull_on_frame, draw_defect_count_on_frame
+from gesture_detection import draw_gesture_on_frame
 
 def create_background_mask(roi, background_roi):
     # If no background has been saved yet, then we would return a fully black mask
@@ -21,9 +23,9 @@ def create_background_mask(roi, background_roi):
 
 
     # Convert the grayscale difference image into a binary mask
-    # If pixel difference > 28, make it white
-    # If pixel difference <= 28, make it black
-    _, mask = cv.threshold(gray, 28, 255, cv.THRESH_BINARY)
+    # If pixel difference > 23, make it white
+    # If pixel difference <= 23, make it black
+    _, mask = cv.threshold(gray, 23, 255, cv.THRESH_BINARY)
     
     # Create a 5x5 kernel for morphology operations
     # This kernel decide the neighborhood size used for cleaning the mask
@@ -57,7 +59,6 @@ def put_mask_preview(frame, mask, box, label):
     frame[preview_y:preview_y + preview_height, preview_x:preview_x + preview_width] = small_mask_bgr
 
     cv.rectangle(frame, (preview_x, preview_y), (preview_x + preview_width, preview_y+ preview_height), (255, 255, 255), 1)
-
 
 
 cam = cv.VideoCapture(0)
@@ -94,8 +95,14 @@ while True:
     # Making it look like a mirror
     frame = cv.flip(frame, 1)
 
+    # Keep clean camera frame for processing
+    raw_frame = frame.copy()
+
+    # Use this one only for drawing boxes, text, previews, contours
+    display_frame = raw_frame.copy()
+
     # Get frame size
-    height, width, channels = frame.shape
+    height, width, channels = raw_frame.shape
 
     box_size = 250
 
@@ -111,8 +118,8 @@ while True:
     player2_box = (player2_x, player2_y, box_size, box_size)
 
     # Crop the Region of Interest inside each box
-    player1_roi = frame[player1_y: player1_y + box_size, player1_x:player1_x + box_size]
-    player2_roi = frame[player2_y: player2_y + box_size, player2_x:player2_x + box_size]
+    player1_roi = raw_frame[player1_y: player1_y + box_size, player1_x:player1_x + box_size]
+    player2_roi = raw_frame[player2_y: player2_y + box_size, player2_x:player2_x + box_size]
 
     if use_background_mode:
         player1_mask = create_background_mask(player1_roi, player1_background)
@@ -124,28 +131,54 @@ while True:
 
     # Draw boxes for each player
     # Player 1 box
-    cv.rectangle(frame, (player1_x, player1_y), (player1_x + box_size, player1_y + box_size), (255, 0, 0), 2)
+    cv.rectangle(display_frame, (player1_x, player1_y), (player1_x + box_size, player1_y + box_size), (255, 0, 0), 2)
     # Player 2 box
-    cv.rectangle(frame, (player2_x, player2_y), (player2_x + box_size, player2_y + box_size), (0, 255, 0), 2)
+    cv.rectangle(display_frame, (player2_x, player2_y), (player2_x + box_size, player2_y + box_size), (0, 255, 0), 2)
 
     # Adding the labels for each player
-    cv.putText(frame, "Player 1", (player1_x, player1_y - 10), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-    cv.putText(frame, "Player 2", (player2_x, player2_y - 10), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    cv.putText(display_frame, "Player 1", (player1_x, player1_y - 10), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+    cv.putText(display_frame, "Player 2", (player2_x, player2_y - 10), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
-    # Show small mask previews inside each box
-    put_mask_preview(frame, player1_mask, player1_box, "Player1 Mask")
-    put_mask_preview(frame, player2_mask, player2_box, "Player2 Mask")
 
-    cv.imshow(window_name, frame)
+    # Find contours from masks
+    player1_contour = find_hand_contour(player1_mask)
+    player2_contour = find_hand_contour(player2_mask)
 
-    if cv.waitKey(1) & 0xFF == ord("b"):
+    # Draw contours on the main frame
+    draw_contour_on_frame(display_frame, player1_contour, player1_box, (255, 0, 0), 2)
+    draw_contour_on_frame(display_frame, player2_contour, player2_box, (0, 255, 0), 2)
+
+    # Draw a centroid on the hand
+    draw_centroid_on_frame(display_frame, player1_contour, player1_box, (0, 0, 255))
+    draw_centroid_on_frame(display_frame, player2_contour, player2_box, (0, 0, 255))
+
+    # Draw convex hulls around each hand
+    draw_convex_hull_on_frame(display_frame, player1_contour, player1_box, (255, 255, 0), 2)
+    draw_convex_hull_on_frame(display_frame, player2_contour, player2_box, (255, 255, 0), 2)
+
+    # Show the number of finger gaps(convexity defects)
+    draw_defect_count_on_frame(display_frame, player1_contour, player1_box, "Player1", (255, 0, 0))
+    draw_defect_count_on_frame(display_frame, player2_contour, player2_box, "P2", (0, 255, 0))
+
+    player1_gesture = draw_gesture_on_frame(display_frame, player1_contour, player1_box, "Player1", (255, 0, 0))
+    player2_gesture = draw_gesture_on_frame(display_frame, player2_contour, player2_box, "Player2", (0, 255 ,0))
+
+        # Show small mask previews inside each box
+    put_mask_preview(display_frame, player1_mask, player1_box, "Player1 Mask")
+    put_mask_preview(display_frame, player2_mask, player2_box, "Player2 Mask")
+
+    cv.imshow(window_name, display_frame)
+
+    key = cv.waitKey(1) & 0xFF
+
+    if key == ord("b"):
         # Save Player 1 and Player 2 empty background
         player1_background = player1_roi.copy()
         player2_background = player2_roi.copy()
 
         use_background_mode = True
 
-    if cv.waitKey(1) & 0xFF == 27:
+    if key == 27:
         break
 
 cam.release()
