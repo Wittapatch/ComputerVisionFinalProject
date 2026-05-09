@@ -39,6 +39,26 @@ def create_background_mask(roi, background_roi):
 
     return mask
 
+def put_mask_preview(frame, mask, box, label):
+    x, y, w, h = box
+
+    preview_width = w // 3
+    preview_height = h // 3
+
+    small_mask = cv.resize(mask, (preview_width, preview_height))
+
+    # Convert grayscale mask to BGR so we can paste it onto color frame
+    small_mask_bgr = cv.cvtColor(small_mask, cv.COLOR_GRAY2BGR)
+
+    preview_x = x + 10
+    preview_y = y + h - preview_height - 10
+
+    # Put the mask preview onto the main frame
+    frame[preview_y:preview_y + preview_height, preview_x:preview_x + preview_width] = small_mask_bgr
+
+    cv.rectangle(frame, (preview_x, preview_y), (preview_x + preview_width, preview_y+ preview_height), (255, 255, 255), 1)
+
+
 
 cam = cv.VideoCapture(0)
 
@@ -111,6 +131,10 @@ while True:
     # Adding the labels for each player
     cv.putText(frame, "Player 1", (player1_x, player1_y - 10), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
     cv.putText(frame, "Player 2", (player2_x, player2_y - 10), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
+    # Show small mask previews inside each box
+    put_mask_preview(frame, player1_mask, player1_box, "Player1 Mask")
+    put_mask_preview(frame, player2_mask, player2_box, "Player2 Mask")
 
     cv.imshow(window_name, frame)
 
