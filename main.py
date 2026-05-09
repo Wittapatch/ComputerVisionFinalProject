@@ -2,6 +2,7 @@ import cv2 as cv
 import numpy as np
 from contour_detection import find_hand_contour, draw_contour_on_frame, draw_centroid_on_frame, draw_convex_hull_on_frame, draw_defect_count_on_frame
 from gesture_detection import draw_gesture_on_frame
+from game_logic import decide_winner
 
 def create_background_mask(roi, background_roi):
     # If no background has been saved yet, then we would return a fully black mask
@@ -162,6 +163,9 @@ while True:
 
     player1_gesture = draw_gesture_on_frame(display_frame, player1_contour, player1_box, "Player1", (255, 0, 0))
     player2_gesture = draw_gesture_on_frame(display_frame, player2_contour, player2_box, "Player2", (0, 255 ,0))
+
+    winner_text = decide_winner(player1_gesture, player2_gesture)
+    cv.putText(display_frame, winner_text, (width// 2 - 170, 70), cv.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
 
         # Show small mask previews inside each box
     put_mask_preview(display_frame, player1_mask, player1_box, "Player1 Mask")
