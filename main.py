@@ -3,6 +3,7 @@ import numpy as np
 from contour_detection import find_hand_contour, draw_contour_on_frame, draw_centroid_on_frame, draw_convex_hull_on_frame, draw_defect_count_on_frame
 from gesture_detection import draw_gesture_on_frame
 from game_logic import decide_winner
+import time
 
 def create_background_mask(roi, background_roi):
     # If no background has been saved yet, then we would return a fully black mask
@@ -61,6 +62,10 @@ def put_mask_preview(frame, mask, box, label):
 
     cv.rectangle(frame, (preview_x, preview_y), (preview_x + preview_width, preview_y+ preview_height), (255, 255, 255), 1)
 
+def both_players_ready(player1_gesture, player2_gesture):
+
+    return player1_gesture != "unknown" and player2_gesture != "unknown"
+
 
 cam = cv.VideoCapture(0)
 
@@ -84,6 +89,17 @@ player2_background = None
 # And use it to compare with the frame that hands by subtracting both images to get
 # The outline of the hand
 use_background_mode = False
+
+game_started = False
+
+countdown_started = False
+countdown_start_time = 0
+countdown_seconds = 3
+
+result_locked = False
+locked_player1_gesture = "unknown"
+locked_player2_gesture = "unknown"
+locked_winner_text = "Waiting"
 
 while True:
     # Read one frame from the camera
@@ -119,8 +135,8 @@ while True:
     player2_box = (player2_x, player2_y, box_size, box_size)
 
     # Crop the Region of Interest inside each box
-    player1_roi = raw_frame[player1_y: player1_y + box_size, player1_x:player1_x + box_size]
-    player2_roi = raw_frame[player2_y: player2_y + box_size, player2_x:player2_x + box_size]
+    player1_roi = raw_frame[player1_y: player1_y + box_size, player1_x:player1_x + box_size].copy()
+    player2_roi = raw_frame[player2_y: player2_y + box_size, player2_x:player2_x + box_size].copy()
 
     if use_background_mode:
         player1_mask = create_background_mask(player1_roi, player1_background)
@@ -164,13 +180,54 @@ while True:
     player1_gesture = draw_gesture_on_frame(display_frame, player1_contour, player1_box, "Player1", (255, 0, 0))
     player2_gesture = draw_gesture_on_frame(display_frame, player2_contour, player2_box, "Player2", (0, 255 ,0))
 
-    winner_text = decide_winner(player1_gesture, player2_gesture)
-    cv.putText(display_frame, winner_text, (width// 2 - 170, 70), cv.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
-
-        # Show small mask previews inside each box
+    # Show small mask previews inside each box
     put_mask_preview(display_frame, player1_mask, player1_box, "Player1 Mask")
     put_mask_preview(display_frame, player2_mask, player2_box, "Player2 Mask")
 
+
+    if not game_started:
+        cv.putText(display_frame, "B: Get background, S: Start Game, R: Restart Game", (40, height-40), cv.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
+        winner_text = "Waiting"
+    # Count down block
+    # If the result is not locked yet, keep checking the current gestures
+    else:
+        if not result_locked:
+            # Start the countdown only when both playes have valid gestures
+            if both_players_ready(player1_gesture, player2_gesture):
+
+                # Start countdown once
+                if not countdown_started:
+                    countdown_started = True
+                    countdown_start_time = time.time()
+
+                # Calculate how much time has passed
+                elapsed_time = time.time() - countdown_start_time
+
+                # Calculate remaining countdown number 
+                remaining_time = countdown_seconds - int(elapsed_time)
+
+                if remaining_time > 0:
+                    cv.putText(display_frame, f"Show gesture in: {remaining_time}", (width//2 - 180, 110), cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 3)
+
+                    winner_text = "Get Ready"
+                else:
+                    locked_player1_gesture = player1_gesture
+                    locked_player2_gesture = player2_gesture 
+                    
+                    locked_winner_text = decide_winner(locked_player1_gesture, locked_player2_gesture)
+
+                    result_locked = True
+                    countdown_started = False
+                    winner_text = locked_winner_text
+            else:
+                countdown_started = False
+                winner_text = "Waiting for both hands"
+        else:
+            winner_text = locked_winner_text
+            cv.putText(display_frame, f"Locked P1: {locked_player1_gesture}", (player1_x, player1_y + box_size + 75), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+            cv.putText(display_frame, f"Locked P2: {locked_player2_gesture}", (player2_x, player2_y + box_size + 75), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+    cv.putText(display_frame, winner_text, (width // 2 - 170, 70), cv.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)        
     cv.imshow(window_name, display_frame)
 
     key = cv.waitKey(1) & 0xFF
@@ -181,6 +238,34 @@ while True:
         player2_background = player2_roi.copy()
 
         use_background_mode = True
+
+        game_started = False
+        countdown_started = False
+        result_locked = False
+
+        locked_player1_gesture = "unknown"
+        locked_player2_gesture = "unknown"
+        locked_winner_text = "Waiting"
+
+    if key == ord("s"):
+        if use_background_mode:
+            game_started = True
+            countdown_started = False
+            result_locked = False
+
+            locked_player1_gesture = "unknown"
+            locked_player2_gesture = "unknown"
+            locked_winner_text = "Waiting"
+
+    if key == ord("r"):
+        game_started = False
+        result_locked = False
+        countdown_started = False
+
+        locked_player1_gesture = "unknown"
+        locked_player2_gesture = "unknown"
+        locked_winner_text = "Waiting"
+
 
     if key == 27:
         break
