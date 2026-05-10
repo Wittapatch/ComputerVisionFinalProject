@@ -7,6 +7,7 @@ import time
 from face_detection import detect_faces, get_largest_face, draw_face_box, crop_face
 from photo_editor import open_photo_editor
 from winner_screen import show_winner_screen
+from face_tracking import create_face_tracker, initialize_face_tracker, update_face_tracker, reset_face_tracker
 
 def create_background_mask(roi, background_roi):
     # If no background has been saved yet, then we would return a fully black mask
@@ -109,6 +110,9 @@ locked_winner_text = "Waiting"
 # Variables for face detection
 current_face_box = None
 winner_photo_path = None
+
+# Initialize the face tracker
+face_tracker = create_face_tracker()
 
 
 
@@ -242,16 +246,30 @@ while True:
     
     if face_photo_mode:
         display_frame = raw_frame.copy()
-        faces = detect_faces(raw_frame)
-        current_face_box = get_largest_face(faces)
-        if current_face_box is not None:
-            x, y, w, h = current_face_box
-            cv.rectangle(display_frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-            cv.putText(display_frame, "Winner!!!", (width // 2 - 200, height -100), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-            cv.putText(display_frame, "F: take face photo | P: take full photo | R: restart game", (width // 2 - 200, height -60), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+        
+        if not face_tracker["initialized"]:
+            faces = detect_faces(raw_frame)
+            detected_face = get_largest_face(faces)
+
+            if detected_face is not None:
+                initialize_face_tracker(face_tracker, raw_frame, detected_face)
+                current_face_box = detected_face
+            else:
+                current_face_box = None
+        else:
+            current_face_box = update_face_tracker(face_tracker, raw_frame)
+
+            if current_face_box is None:
+                reset_face_tracker(face_tracker)
+        
+        # Draw the tracked face box 
+        draw_face_box(display_frame, current_face_box, (0, 255, 0))
+    
+        cv.putText(display_frame, "F: Take face photo, P: Take Full Photo, R: restart game", (width // 2 - 270, height - 60), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
     else:
-        cv.putText(display_frame, winner_text, (width//2 - 170, 70), cv.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
-  
+        cv.putText(display_frame, winner_text, (width // 2 - 170, 70), cv.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
+
+
     cv.imshow(window_name, display_frame)
 
     key = cv.waitKey(1) & 0xFF
@@ -274,6 +292,8 @@ while True:
         current_face_box = None
         winner_photo_path = None
 
+        reset_face_tracker(face_tracker)
+
     if key == ord("s"):
         if use_background_mode:
             game_started = True
@@ -286,6 +306,8 @@ while True:
 
             current_face_box = None
             winner_photo_path = None
+            
+            reset_face_tracker(face_tracker)
 
     if key == ord("p"):
         if result_locked and locked_winner_text in ["Player 1 Wins", "Player 2 Wins"]:
@@ -304,6 +326,9 @@ while True:
 
                 current_face_box = None
                 winner_photo_path = None
+
+                reset_face_tracker(face_tracker)
+
             elif winner_photo_path is not None:
                 show_winner_screen(winner_photo_path)
                 game_started = False
@@ -316,6 +341,8 @@ while True:
 
                 current_face_box = None
                 winner_photo_path = None
+
+                reset_face_tracker(face_tracker)
 
     if key == ord("f"):
         if result_locked and locked_winner_text in ["Player 1 Wins", "Player 2 Wins"]:
@@ -337,6 +364,9 @@ while True:
 
                     current_face_box = None
                     winner_photo_path = None
+
+                    reset_face_tracker(face_tracker)
+
                 elif winner_photo_path is not None:
                     show_winner_screen(winner_photo_path)
                     game_started = False
@@ -350,6 +380,8 @@ while True:
                     current_face_box = None
                     winner_photo_path = None
 
+                    reset_face_tracker(face_tracker)
+
     if key == ord("r"):
         game_started = False
         result_locked = False
@@ -361,6 +393,8 @@ while True:
 
         current_face_box = None
         winner_photo_path = None
+
+        reset_face_tracker(face_tracker)
 
 
     if key == 27:

@@ -67,8 +67,8 @@ def open_photo_editor(image, save_path="winner_photo.jpg"):
         preview = final_image.copy()
 
     
-        cv.putText(preview, "Adjust settings with trackbars", (20, 35), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-        cv.putText(preview, "S: Save, ESC: Cancel, R: Restart", (20, 70), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        cv.putText(preview, "Use trackerbars to edit", (20, 35), cv.FONT_HERSHEY_SIMPLEX, 0.50, (0, 255, 255), 1)
+        cv.putText(preview, "S: Save, ESC: Cancel, R: Restart", (20, 70), cv.FONT_HERSHEY_SIMPLEX, 0.50, (0, 255, 255), 1)
 
         cv.imshow(window_name, preview)
 
