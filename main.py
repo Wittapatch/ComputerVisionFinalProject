@@ -8,6 +8,41 @@ from face_detection import detect_faces, get_largest_face, draw_face_box, crop_f
 from photo_editor import open_photo_editor
 from winner_screen import show_winner_screen
 from face_tracking import create_face_tracker, initialize_face_tracker, update_face_tracker, reset_face_tracker
+from ultralytics import YOLO
+
+#A function that detects hands for the entire screen where confidence of detected must be >50% for default confidence value
+def detect_hands_full_frame(model, frame, display_frame, conf=0.25):
+    #Predict bounding box locations/hand locations using YOLO
+    results = model.predict(frame, conf=conf, verbose=False)
+    result = results[0]
+
+    hand_boxes = []
+    #If no hand is detected return an empty list
+    if result.boxes is None or len(result.boxes) == 0:
+        return hand_boxes
+    #For each detected hand, get the confidence, id of the detected hand and it's label, which is a hand
+    for box in result.boxes:
+        confidence = float(box.conf[0])
+        class_id = int(box.cls[0])
+        label = model.names[class_id]
+        #Get the bounding box coordinates for the detected hand
+        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
+        #Add bounding box coordinates, confidence value and label to the list of detected hands
+        hand_boxes.append((x1, y1, x2, y2, confidence, label))
+        #Add a rectangle of the bounding box coordinates to the displayed frame
+        cv.rectangle(display_frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
+        #Add text to the displayed frame showing the confidence value
+        cv.putText(
+            display_frame,
+            f"{label} {confidence:.2f}",
+            (x1, y1 - 10),
+            cv.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 255),
+            2
+        )
+
+    return hand_boxes
 
 def create_background_mask(roi, background_roi):
     # If no background has been saved yet, then we would return a fully black mask
@@ -114,7 +149,8 @@ winner_photo_path = None
 # Initialize the face tracker
 face_tracker = create_face_tracker()
 
-
+#Get YOLO model
+hand_model = YOLO("yolo_model/weights/best.pt")
 
 while True:
     # Read one frame from the camera
@@ -132,6 +168,9 @@ while True:
 
     # Use this one only for drawing boxes, text, previews, contours
     display_frame = raw_frame.copy()
+
+    #Detect hands and add the results to the display frame
+    detect_hands_full_frame(hand_model, raw_frame, display_frame)
 
     # Get frame size
     height, width, channels = raw_frame.shape
