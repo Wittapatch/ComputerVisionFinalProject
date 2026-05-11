@@ -187,7 +187,7 @@ face_tracker = create_face_tracker()
 hand_model = YOLO("yolo_model/weights/best.pt")
 
 #Get CNN model
-cnn_model = keras.models.load_model("cnn_model_light.keras")
+cnn_model = keras.models.load_model("cnn_model_light_extra.keras")
 
 while True:
     # Read one frame from the camera
