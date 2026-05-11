@@ -25,7 +25,7 @@ def detect_rps_roi(model,display_frame,player_roi,player_x,player_y, label, min_
     #Changed to float32 because it will be normalized
     x = resized_roi_rgb.astype("float32")
     #Dimensions are expanded because the batch size needs to be specified to the CNN model
-    x = np.expand_dims(resized_roi_rgb,axis=0)
+    x = np.expand_dims(x, axis=0)
     #classify the gesture of the ROI. [0] is used since the returned predictions are in batches
     pred = model.predict(x,verbose=0)[0]
     #Get the index position of the largest value
