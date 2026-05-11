@@ -229,14 +229,11 @@ while True:
     player2_roi = raw_frame[player2_y: player2_y + box_size, player2_x:player2_x + box_size].copy()
 
     #Run the gesture classification for verification purposes
-    if not use_background_mode:
-        detect_rps_roi(cnn_model,display_frame,player1_roi,player1_x,player1_y,min_conf=0.5)
-        detect_rps_roi(cnn_model,display_frame,player2_roi,player2_x,player2_y,min_conf=0.5)
-    elif use_background_mode:
+    detect_rps_roi(cnn_model,display_frame,player1_roi,player1_x,player1_y,min_conf=0.5)
+    detect_rps_roi(cnn_model,display_frame,player2_roi,player2_x,player2_y,min_conf=0.5)
+    if use_background_mode:
         player1_mask = create_background_mask(player1_roi, player1_background)
         player2_mask = create_background_mask(player2_roi, player2_background)
-        detect_rps_roi(cnn_model,display_frame,player1_mask,player1_x,player1_y,min_conf=0.5)
-        detect_rps_roi(cnn_model,display_frame,player2_mask,player2_x,player2_y,min_conf=0.5)
     else:
         # if background mode is not active yet, then create an empty black mask
         player1_mask = np.zeros(player1_roi.shape[:2], dtype=np.uint8)
