@@ -227,11 +227,11 @@ while True:
     # Crop the Region of Interest inside each box
     player1_roi = raw_frame[player1_y: player1_y + box_size, player1_x:player1_x + box_size].copy()
     player2_roi = raw_frame[player2_y: player2_y + box_size, player2_x:player2_x + box_size].copy()
-
     if use_background_mode:
         player1_mask = create_background_mask(player1_roi, player1_background)
         player2_mask = create_background_mask(player2_roi, player2_background)
-        #Run the gesture classification for verification purposes
+        #Run the gesture classification for verification purposes. Turn the image into black object and white background
+        #since the data used for training the CNN uses white background.
         detect_rps_roi(cnn_model,display_frame,player1_mask,player1_x,player1_y,min_conf=0.5)
         detect_rps_roi(cnn_model,display_frame,player2_mask,player2_x,player2_y,min_conf=0.5)
     else:
