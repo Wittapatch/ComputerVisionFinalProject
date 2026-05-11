@@ -34,7 +34,7 @@ def detect_rps_roi(model,display_frame,player_roi,player_x,player_y, label, min_
     gesture = CLASS_NAME[class_id]
     #If confidence is less than minimum confidence return unknown
     if confidence<min_conf:
-        gesture="Unknown"
+        gesture="unknown"
     #Put output text on the display frame
     cv.putText(display_frame, f" {label} CNN: {gesture} {confidence:.2f}", 
     (player_x, player_y + 250 + 70),
@@ -42,7 +42,7 @@ def detect_rps_roi(model,display_frame,player_roi,player_x,player_y, label, min_
     0.6,
     (255, 0, 0),
     2)
-    return gesture
+    return gesture, confidence
 
 #A function that detects hands for the entire screen where confidence of detected must be >50% for default confidence value
 def detect_hands_full_frame(model, frame, display_frame, conf=0.25):
@@ -175,6 +175,11 @@ locked_player1_gesture = "unknown"
 locked_player2_gesture = "unknown"
 locked_winner_text = "Waiting"
 validation_message = ""
+last_player1_cnn_gesture = "unknown"
+last_player2_cnn_gesture = "unknown"
+last_player1_cnn_confidence = 0.0
+last_player2_cnn_confidence = 0.0
+show_cnn_prediction = False
 
 # Variables for face detection
 current_face_box = None
@@ -247,7 +252,6 @@ while True:
     cv.putText(display_frame, "Player 1", (player1_x, player1_y - 10), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
     cv.putText(display_frame, "Player 2", (player2_x, player2_y - 10), cv.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
-
     # Find contours from masks
     player1_contour = find_hand_contour(player1_mask)
     player2_contour = find_hand_contour(player2_mask)
@@ -274,30 +278,30 @@ while True:
     player1_cnn_gesture = "unknown"
     player2_cnn_gesture = "unknown"
 
-    if use_background_mode:
-        player1_cnn_gesture = detect_rps_roi(
-            cnn_model,
-            display_frame,
-            player1_roi,   # use player1_roi if CNN was trained on normal RGB hand images
-            player1_x,
-            player1_y,
-            "P1",
-            min_conf=0.5
-        )
-
-        player2_cnn_gesture = detect_rps_roi(
-            cnn_model,
-            display_frame,
-            player2_roi,   # use player2_roi if CNN was trained on normal RGB hand images
-            player2_x,
-            player2_y,
-            "P2",
-            min_conf=0.5
-        )
-
     # Show small mask previews inside each box
     put_mask_preview(display_frame, player1_mask, player1_box, "Player1 Mask")
     put_mask_preview(display_frame, player2_mask, player2_box, "Player2 Mask")
+
+    if show_cnn_prediction:
+        cv.putText(
+            display_frame,
+            f"P1 CNN: {last_player1_cnn_gesture} ({last_player1_cnn_confidence:.2f})",
+            (player1_x, player1_y + box_size + 100),
+            cv.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 0, 255),
+            2
+        )
+
+        cv.putText(
+            display_frame,
+            f"P2 CNN: {last_player2_cnn_gesture} ({last_player2_cnn_confidence:.2f})",
+            (player2_x, player2_y + box_size + 100),
+            cv.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 0, 255),
+            2
+        )
 
 
     if not game_started:
@@ -329,6 +333,38 @@ while True:
 
                     winner_text = "Get Ready"
                 else:
+                    # Capture the exact hand images when countdown ends
+                    final_player1_roi = player1_roi.copy()
+                    final_player2_roi = player2_roi.copy()
+
+                    player1_cnn_gesture, player1_cnn_confidence = detect_rps_roi(
+                        cnn_model,
+                        display_frame,
+                        final_player1_roi,
+                        player1_x,
+                        player1_y,
+                        "P1",
+                        min_conf=0.5
+                    )
+
+                    player2_cnn_gesture, player2_cnn_confidence = detect_rps_roi(
+                        cnn_model,
+                        display_frame,
+                        final_player2_roi,
+                        player2_x,
+                        player2_y,
+                        "P2",
+                        min_conf=0.5
+                    )
+
+                    # Save CNN predictions so they stay visible on screen
+                    last_player1_cnn_gesture = player1_cnn_gesture
+                    last_player2_cnn_gesture = player2_cnn_gesture
+                    last_player1_cnn_confidence = player1_cnn_confidence
+                    last_player2_cnn_confidence = player2_cnn_confidence
+                    show_cnn_prediction = True
+
+                    # Compare traditional CV result with CNN result
                     p1_match = player1_gesture == player1_cnn_gesture
                     p2_match = player2_gesture == player2_cnn_gesture
 
@@ -359,6 +395,7 @@ while True:
                         result_locked = True
                         countdown_started = False
                         winner_text = locked_winner_text
+                    
             else:
                 countdown_started = False
                 winner_text = "Waiting for both hands"
@@ -415,6 +452,12 @@ while True:
         locked_winner_text = "Waiting"
         validation_message = ""
 
+        show_cnn_prediction = False
+        last_player1_cnn_gesture = "unknown"
+        last_player2_cnn_gesture = "unknown"
+        last_player1_cnn_confidence = 0.0
+        last_player2_cnn_confidence = 0.0
+
         current_face_box = None
         winner_photo_path = None
 
@@ -430,6 +473,12 @@ while True:
             locked_player2_gesture = "unknown"
             locked_winner_text = "Waiting"
             validation_message = ""
+
+            show_cnn_prediction = False
+            last_player1_cnn_gesture = "unknown"
+            last_player2_cnn_gesture = "unknown"
+            last_player1_cnn_confidence = 0.0
+            last_player2_cnn_confidence = 0.0
 
             current_face_box = None
             winner_photo_path = None
@@ -522,6 +571,12 @@ while True:
         locked_player2_gesture = "unknown"
         locked_winner_text = "Waiting"
         validation_message = ""
+
+        show_cnn_prediction = False
+        last_player1_cnn_gesture = "unknown"
+        last_player2_cnn_gesture = "unknown"
+        last_player1_cnn_confidence = 0.0
+        last_player2_cnn_confidence = 0.0
 
         current_face_box = None
         winner_photo_path = None
