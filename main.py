@@ -9,13 +9,46 @@ from photo_editor import open_photo_editor
 from winner_screen import show_winner_screen
 from face_tracking import create_face_tracker, initialize_face_tracker, update_face_tracker, reset_face_tracker
 from ultralytics import YOLO
+from tensorflow import keras
+
+
+def detect_rps_roi(model,display_frame,player_roi,player_x,player_y,min_conf=0.5):
+    CLASS_NAME = ["paper","rock",'scissors']
+    # Get CNN expected image size from the model input
+    input_shape = model.input_shape
+    img_height = input_shape[1]
+    img_width = input_shape[2]
+    #Convert from BGR to RGB
+    player_roi_rgb = cv.cvtColor(player_roi,cv.COLOR_BGR2RGB)
+    #Resize the player's roi to the same size of the input shape for CNN model
+    resized_roi_rgb = cv.resize(player_roi_rgb,(img_width,img_height))
+    #Changed to float32 because it will be normalized
+    x = resized_roi_rgb.astype("float32")
+    #Dimensions are expanded because the batch size needs to be specified to the CNN model
+    x = np.expand_dims(resized_roi_rgb,axis=0)
+    #classify the gesture of the ROI. [0] is used since the returned predictions are in batches
+    pred = model.predict(x,verbose=0)[0]
+    #Get the index position of the largest value
+    class_id = int(np.argmax(pred))
+    confidence = float(pred[class_id])
+    gesture = CLASS_NAME[class_id]
+    #If confidence is less than minimum confidence return unknown
+    if confidence<min_conf:
+        gesture="Unknown"
+    #Put output text on the display frame
+    cv.putText(display_frame, f"CNN: {gesture} {confidence:.2f}", 
+    (player_x, player_y + 250 + 70),
+    cv.FONT_HERSHEY_SIMPLEX,
+    0.6,
+    (255, 0, 0),
+    2
+)
 
 #A function that detects hands for the entire screen where confidence of detected must be >50% for default confidence value
 def detect_hands_full_frame(model, frame, display_frame, conf=0.25):
     #Predict bounding box locations/hand locations using YOLO
     results = model.predict(frame, conf=conf, verbose=False)
     result = results[0]
-
     hand_boxes = []
     #If no hand is detected return an empty list
     if result.boxes is None or len(result.boxes) == 0:
@@ -152,6 +185,9 @@ face_tracker = create_face_tracker()
 #Get YOLO model
 hand_model = YOLO("yolo_model/weights/best.pt")
 
+#Get CNN model
+cnn_model = keras.models.load_model("cnn_model.keras")
+
 while True:
     # Read one frame from the camera
     ret, frame = cam.read()
@@ -192,6 +228,9 @@ while True:
     player1_roi = raw_frame[player1_y: player1_y + box_size, player1_x:player1_x + box_size].copy()
     player2_roi = raw_frame[player2_y: player2_y + box_size, player2_x:player2_x + box_size].copy()
 
+    #Run the gesture classification for verification purposes
+    detect_rps_roi(cnn_model,display_frame,player1_roi,player1_x,player1_y,min_conf=0.5)
+    detect_rps_roi(cnn_model,display_frame,player2_roi,player2_x,player2_y,min_conf=0.5)
     if use_background_mode:
         player1_mask = create_background_mask(player1_roi, player1_background)
         player2_mask = create_background_mask(player2_roi, player2_background)
