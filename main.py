@@ -12,7 +12,7 @@ from ultralytics import YOLO
 from tensorflow import keras
 
 
-def detect_rps_roi(model,display_frame,player_roi,player_x,player_y,min_conf=0.5):
+def detect_rps_roi(model,display_frame,player_roi,player_x,player_y, label, min_conf=0.5):
     CLASS_NAME = ["paper","rock",'scissors']
     # Get CNN expected image size from the model input
     input_shape = model.input_shape
@@ -36,13 +36,13 @@ def detect_rps_roi(model,display_frame,player_roi,player_x,player_y,min_conf=0.5
     if confidence<min_conf:
         gesture="Unknown"
     #Put output text on the display frame
-    cv.putText(display_frame, f"CNN: {gesture} {confidence:.2f}", 
+    cv.putText(display_frame, f" {label} CNN: {gesture} {confidence:.2f}", 
     (player_x, player_y + 250 + 70),
     cv.FONT_HERSHEY_SIMPLEX,
     0.6,
     (255, 0, 0),
-    2
-)
+    2)
+    return gesture
 
 #A function that detects hands for the entire screen where confidence of detected must be >50% for default confidence value
 def detect_hands_full_frame(model, frame, display_frame, conf=0.25):
@@ -174,6 +174,7 @@ result_locked = False
 locked_player1_gesture = "unknown"
 locked_player2_gesture = "unknown"
 locked_winner_text = "Waiting"
+validation_message = ""
 
 # Variables for face detection
 current_face_box = None
@@ -231,10 +232,6 @@ while True:
     if use_background_mode:
         player1_mask = create_background_mask(player1_roi, player1_background)
         player2_mask = create_background_mask(player2_roi, player2_background)
-        #Run the gesture classification for verification purposes. Turn the image into black object and white background
-        #since the data used for training the CNN uses white background.
-        detect_rps_roi(cnn_model,display_frame,player1_mask,player1_x,player1_y,min_conf=0.5)
-        detect_rps_roi(cnn_model,display_frame,player2_mask,player2_x,player2_y,min_conf=0.5)
     else:
         # if background mode is not active yet, then create an empty black mask
         player1_mask = np.zeros(player1_roi.shape[:2], dtype=np.uint8)
@@ -272,7 +269,31 @@ while True:
     draw_defect_count_on_frame(display_frame, player2_contour, player2_box, "P2", (0, 255, 0))
 
     player1_gesture = draw_gesture_on_frame(display_frame, player1_contour, player1_box, "Player1", (255, 0, 0))
-    player2_gesture = draw_gesture_on_frame(display_frame, player2_contour, player2_box, "Player2", (0, 255 ,0))
+    player2_gesture = draw_gesture_on_frame(display_frame, player2_contour, player2_box, "Player2", (0, 255 ,0))    
+
+    player1_cnn_gesture = "unknown"
+    player2_cnn_gesture = "unknown"
+
+    if use_background_mode:
+        player1_cnn_gesture = detect_rps_roi(
+            cnn_model,
+            display_frame,
+            player1_roi,   # use player1_roi if CNN was trained on normal RGB hand images
+            player1_x,
+            player1_y,
+            "P1",
+            min_conf=0.5
+        )
+
+        player2_cnn_gesture = detect_rps_roi(
+            cnn_model,
+            display_frame,
+            player2_roi,   # use player2_roi if CNN was trained on normal RGB hand images
+            player2_x,
+            player2_y,
+            "P2",
+            min_conf=0.5
+        )
 
     # Show small mask previews inside each box
     put_mask_preview(display_frame, player1_mask, player1_box, "Player1 Mask")
@@ -281,7 +302,10 @@ while True:
 
     if not game_started:
         cv.putText(display_frame, "B: Get background, S: Start Game, R: Restart Game", (40, height-40), cv.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
-        winner_text = "Waiting"
+        if validation_message != "":
+            winner_text = validation_message
+        else:
+            winner_text = "Waiting"
     # Count down block
     # If the result is not locked yet, keep checking the current gestures
     else:
@@ -305,14 +329,36 @@ while True:
 
                     winner_text = "Get Ready"
                 else:
-                    locked_player1_gesture = player1_gesture
-                    locked_player2_gesture = player2_gesture 
-                    
-                    locked_winner_text = decide_winner(locked_player1_gesture, locked_player2_gesture)
+                    p1_match = player1_gesture == player1_cnn_gesture
+                    p2_match = player2_gesture == player2_cnn_gesture
 
-                    result_locked = True
-                    countdown_started = False
-                    winner_text = locked_winner_text
+                    if not p1_match or not p2_match:
+                        validation_message = "CV and CNN do not match. Press S to play again."
+
+                        game_started = False
+                        countdown_started = False
+                        result_locked = False
+
+                        locked_player1_gesture = "unknown"
+                        locked_player2_gesture = "unknown"
+                        locked_winner_text = "Waiting"
+
+                        winner_text = validation_message
+
+                    else:
+                        validation_message = ""
+
+                        locked_player1_gesture = player1_gesture
+                        locked_player2_gesture = player2_gesture
+
+                        locked_winner_text = decide_winner(
+                            locked_player1_gesture,
+                            locked_player2_gesture
+                        )
+
+                        result_locked = True
+                        countdown_started = False
+                        winner_text = locked_winner_text
             else:
                 countdown_started = False
                 winner_text = "Waiting for both hands"
@@ -367,6 +413,7 @@ while True:
         locked_player1_gesture = "unknown"
         locked_player2_gesture = "unknown"
         locked_winner_text = "Waiting"
+        validation_message = ""
 
         current_face_box = None
         winner_photo_path = None
@@ -382,6 +429,7 @@ while True:
             locked_player1_gesture = "unknown"
             locked_player2_gesture = "unknown"
             locked_winner_text = "Waiting"
+            validation_message = ""
 
             current_face_box = None
             winner_photo_path = None
@@ -402,6 +450,7 @@ while True:
                 locked_player1_gesture = "unknown"
                 locked_player2_gesture = "unknown"
                 locked_winner_text = "Waiting"
+                validation_message = ""
 
                 current_face_box = None
                 winner_photo_path = None
@@ -417,6 +466,7 @@ while True:
                 locked_player1_gesture = "unknown"
                 locked_player2_gesture = "unknown"
                 locked_winner_text = "Waiting"
+                validation_message = ""
 
                 current_face_box = None
                 winner_photo_path = None
@@ -440,6 +490,7 @@ while True:
                     locked_player1_gesture = "unknown"
                     locked_player2_gesture = "unknown"
                     locked_winner_text = "Waiting"
+                    validation_message = ""
 
                     current_face_box = None
                     winner_photo_path = None
@@ -455,6 +506,7 @@ while True:
                     locked_player1_gesture = "unknown"
                     locked_player2_gesture = "unknown"
                     locked_winner_text = "Waiting"
+                    validation_message = ""
 
                     current_face_box = None
                     winner_photo_path = None
@@ -469,6 +521,7 @@ while True:
         locked_player1_gesture = "unknown"
         locked_player2_gesture = "unknown"
         locked_winner_text = "Waiting"
+        validation_message = ""
 
         current_face_box = None
         winner_photo_path = None
