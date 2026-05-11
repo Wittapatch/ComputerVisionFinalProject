@@ -186,7 +186,7 @@ face_tracker = create_face_tracker()
 hand_model = YOLO("yolo_model/weights/best.pt")
 
 #Get CNN model
-cnn_model = keras.models.load_model("cnn_model.keras")
+cnn_model = keras.models.load_model("cnn_model_light.keras")
 
 while True:
     # Read one frame from the camera
@@ -227,6 +227,7 @@ while True:
     # Crop the Region of Interest inside each box
     player1_roi = raw_frame[player1_y: player1_y + box_size, player1_x:player1_x + box_size].copy()
     player2_roi = raw_frame[player2_y: player2_y + box_size, player2_x:player2_x + box_size].copy()
+
     if use_background_mode:
         player1_mask = create_background_mask(player1_roi, player1_background)
         player2_mask = create_background_mask(player2_roi, player2_background)
