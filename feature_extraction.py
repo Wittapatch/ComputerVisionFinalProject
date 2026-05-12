@@ -70,6 +70,27 @@ def extract_features(contour,roi):
         cy = moments["m01"]/moments["m00"]
         cx_ratio = cx/roi_w
         cy_ratio = cy/roi_h
+
+    hull_indices = cv.convexHull(contour,returnPoints=False)
+    defects = cv.convexityDefects(contour,hull_indices)
+    #Default value
+    max_defect_ratio = 0
+    depths = []
+    if defects is not None:
+        #Used to calculate ratio, since they are more useful than absolute values
+        normalizer = max(w,h)
+        #Prevents division by 0
+        if normalizer ==0:
+            normalizer=1
+        #Loop through defects
+        for i in range(defects.shape[0]):
+            start_idx, end_idx, far_idx, depth = defects[i, 0]
+            #Depth is stored multiplied by 256, so divide by 256 to get the true value
+            real_depth = depth/256
+            depth_ratio = real_depth/normalizer
+            depths.append(depth_ratio)
+    if not len(depths)==0:
+        max_defect_ratio = max(depths)
     #Put all these features into a pandas series
     features = pd.Series({
     "defect_count": defect_count,
@@ -87,7 +108,8 @@ def extract_features(contour,roi):
     "hu_log_6":hu_log[5],
     "hu_log_7":hu_log[6],
     "cx_ratio":cx_ratio,
-    "cy_ratio":cy_ratio
+    "cy_ratio":cy_ratio,
+    "max_defect_depth_ratio":max_defect_ratio
     })
     return features
     
