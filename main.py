@@ -10,7 +10,7 @@ from winner_screen import show_winner_screen
 from face_tracking import create_face_tracker, initialize_face_tracker, update_face_tracker, reset_face_tracker
 from ultralytics import YOLO
 from tensorflow import keras
-from feature_extraction import extract_features, create_hand_mask
+from feature_extraction import extract_features
 import pandas as pd
 import joblib
 
@@ -25,7 +25,6 @@ def predict_face_emotion(model, face_image, min_conf=0.5):
     input_shape = model.input_shape
     img_height = input_shape[1]
     img_width = input_shape[2]
-    img_channels = input_shape[3]
 
     rgb = cv.cvtColor(face_image, cv.COLOR_BGR2RGB)
     resized = cv.resize(rgb, (img_width, img_height))
@@ -68,14 +67,52 @@ def add_emotion_message_to_photo(photo, emotion, confidence):
 
     h, w = edited_photo.shape[:2]
 
-    # Add dark rectangle behind text so it is readable
-    cv.rectangle(edited_photo,(0, h - 90),(w, h),(0, 0, 0),-1)
+    font = cv.FONT_HERSHEY_SIMPLEX
+    thickness = 2
+    max_text_width = w - 20
 
-    cv.putText(edited_photo,message,(20, h - 50),cv.FONT_HERSHEY_SIMPLEX,0.8,(0, 255, 255),2)
+    # Shrink congratulations message until it fits
+    message_scale = 0.8
+    while message_scale > 0.3:
+        (message_width, message_height), _ = cv.getTextSize(message, font, message_scale, thickness)
 
-    cv.putText(edited_photo,confidence_text,(20, h - 20),cv.FONT_HERSHEY_SIMPLEX,0.6,(255, 255, 255),2)
+        if message_width <= max_text_width:
+            break
+
+        message_scale -= 0.05
+
+    # Shrink emotion confidence text until it fits
+    confidence_scale = 0.55
+    while confidence_scale > 0.25:
+        (confidence_width, confidence_height), _ = cv.getTextSize(confidence_text, font, confidence_scale, thickness)
+        if confidence_width <= max_text_width:
+            break
+        confidence_scale -= 0.05
+
+    # Get the final text sizes
+    (message_width, message_height), _ = cv.getTextSize(message, font, message_scale, thickness)
+
+    (confidence_width, confidence_height), _= cv.getTextSize(confidence_text,font,confidence_scale,thickness)
+
+    # Make dark rectangle height based on text size
+    box_height = message_height + confidence_height + 45
+    y1 = max(0, h - box_height)
+
+    cv.rectangle(edited_photo,(0, y1),(w, h),(0, 0, 0),-1)
+
+    # Center both text lines
+    message_x = (w - message_width) // 2
+    confidence_x = (w - confidence_width) // 2
+
+    message_y = y1 + message_height + 12
+    confidence_y = message_y + confidence_height + 15
+
+    cv.putText(edited_photo,message,(message_x, message_y),font,message_scale,(0, 255, 255),thickness)
+
+    cv.putText(edited_photo,confidence_text,(confidence_x, confidence_y),font,confidence_scale,(255, 255, 255),thickness)
 
     return edited_photo
+
     
 def predict_img_xgboost(model, img, mask, label_encoder,display_frame,player_x,player_y, label, min_conf=0.6):
     contour = find_hand_contour(mask)
@@ -170,7 +207,7 @@ def create_background_mask(roi, background_roi):
 
     return mask
 
-def put_mask_preview(frame, mask, box, label):
+def put_mask_preview(frame, mask, box):
     x, y, w, h = box
 
     preview_width = w // 3
@@ -223,7 +260,7 @@ game_started = False
 
 countdown_started = False
 countdown_start_time = 0
-countdown_seconds = 3
+countdown_seconds = 2
 
 result_locked = False
 locked_player1_gesture = "unknown"
@@ -235,6 +272,11 @@ last_player2_xgb_gesture = "unknown"
 last_player1_xgb_confidence = 0.0
 last_player2_xgb_confidence = 0.0
 show_xgb_prediction = False
+
+# Adding some pause before going to the winner screen 
+result_pause_started = False
+result_pause_start_time = 0
+result_pause_seconds = 2
 
 # Variables for face detection
 current_face_box = None
@@ -301,29 +343,8 @@ while True:
         player1_mask = np.zeros(player1_roi.shape[:2], dtype=np.uint8)
         player2_mask = np.zeros(player2_roi.shape[:2], dtype=np.uint8)
 
-    player1_xgb_live, player1_xgb_live_confidence = predict_img_xgboost(
-        xgboost_model,
-        player1_roi,
-        player1_mask,
-        label_encoder,
-        display_frame,
-        player1_x,
-        player1_y,
-        "P1",
-        min_conf=0.6
-    )
-
-    player2_xgb_live, player2_xgb_live_confidence = predict_img_xgboost(
-        xgboost_model,
-        player2_roi,
-        player2_mask,
-        label_encoder,
-        display_frame,
-        player2_x,
-        player2_y,
-        "P2",
-        min_conf=0.6
-    )
+    predict_img_xgboost(xgboost_model,player1_roi,player1_mask,label_encoder,display_frame,player1_x,player1_y,"P1",min_conf=0.6)
+    predict_img_xgboost(xgboost_model,player2_roi,player2_mask,label_encoder,display_frame,player2_x,player2_y,"P2",min_conf=0.6)
 
     # Draw boxes for each player
     # Player 1 box
@@ -359,8 +380,8 @@ while True:
     player2_gesture = draw_gesture_on_frame(display_frame, player2_contour, player2_box, "Player2", (0, 255 ,0))    
 
     # Show small mask previews inside each box
-    put_mask_preview(display_frame, player1_mask, player1_box, "Player1 Mask")
-    put_mask_preview(display_frame, player2_mask, player2_box, "Player2 Mask")
+    put_mask_preview(display_frame, player1_mask, player1_box)
+    put_mask_preview(display_frame, player2_mask, player2_box)
 
     if show_xgb_prediction:
         cv.putText(display_frame, f"Final P1 XGB: {last_player1_xgb_gesture} ({last_player1_xgb_confidence:.2f})", (player1_x, player1_y + box_size + 100), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
@@ -400,29 +421,8 @@ while True:
                     final_player1_roi = player1_roi.copy()
                     final_player2_roi = player2_roi.copy()
 
-                    player1_xgb_gesture, player1_xgb_confidence = predict_img_xgboost(
-                        xgboost_model,
-                        final_player1_roi,
-                        player1_mask,
-                        label_encoder,
-                        display_frame,
-                        player1_x,
-                        player1_y,
-                        "P1",
-                        min_conf=0.6
-                    )
-                    
-                    player2_xgb_gesture, player2_xgb_confidence = predict_img_xgboost(
-                        xgboost_model,
-                        final_player2_roi,
-                        player2_mask,
-                        label_encoder,
-                        display_frame,
-                        player2_x,
-                        player2_y,
-                        "P2",
-                        min_conf=0.6
-                    )
+                    player1_xgb_gesture, player1_xgb_confidence = predict_img_xgboost(xgboost_model,final_player1_roi,player1_mask,label_encoder,display_frame,player1_x,player1_y,"P1",min_conf=0.6)          
+                    player2_xgb_gesture, player2_xgb_confidence = predict_img_xgboost(xgboost_model,final_player2_roi,player2_mask,label_encoder,display_frame,player2_x,player2_y,"P2",min_conf=0.6)
 
                     last_player1_xgb_gesture = player1_xgb_gesture
                     last_player2_xgb_gesture = player2_xgb_gesture
@@ -452,14 +452,15 @@ while True:
                         locked_player1_gesture = player1_gesture
                         locked_player2_gesture = player2_gesture
 
-                        locked_winner_text = decide_winner(
-                            locked_player1_gesture,
-                            locked_player2_gesture
-                        )
+                        locked_winner_text = decide_winner(locked_player1_gesture,locked_player2_gesture)
 
                         result_locked = True
                         countdown_started = False
                         winner_text = locked_winner_text
+
+                        # Pause for 2 seconds before switching to winner face/photo mode
+                        result_pause_started = True
+                        result_pause_start_time = time.time()
                     
             else:
                 countdown_started = False
@@ -468,8 +469,11 @@ while True:
             winner_text = locked_winner_text
             cv.putText(display_frame, f"Locked P1: {locked_player1_gesture}", (player1_x, player1_y + box_size + 75), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
             cv.putText(display_frame, f"Locked P2: {locked_player2_gesture}", (player2_x, player2_y + box_size + 75), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    pause_finished = True
+    if result_pause_started:
+        pause_finished = time.time() - result_pause_start_time >= result_pause_seconds
 
-    face_photo_mode = result_locked and locked_winner_text in ["Player 1 Wins", "Player 2 Wins"]
+    face_photo_mode = result_locked and locked_winner_text in ["Player 1 Wins", "Player 2 Wins"] and pause_finished
     
     if face_photo_mode:
         display_frame = raw_frame.copy()
@@ -512,6 +516,9 @@ while True:
         countdown_started = False
         result_locked = False
 
+        result_pause_started = False
+        result_pause_start_time = 0
+
         locked_player1_gesture = "unknown"
         locked_player2_gesture = "unknown"
         locked_winner_text = "Waiting"
@@ -533,6 +540,9 @@ while True:
             game_started = True
             countdown_started = False
             result_locked = False
+
+            result_pause_started = False
+            result_pause_start_time = 0
 
             locked_player1_gesture = "unknown"
             locked_player2_gesture = "unknown"
@@ -645,6 +655,9 @@ while True:
         game_started = False
         result_locked = False
         countdown_started = False
+
+        result_pause_started = False
+        result_pause_start_time = 0
 
         locked_player1_gesture = "unknown"
         locked_player2_gesture = "unknown"

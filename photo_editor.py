@@ -66,9 +66,46 @@ def open_photo_editor(image, save_path="winner_photo.jpg"):
 
         preview = final_image.copy()
 
-    
-        cv.putText(preview, "Use trackerbars to edit", (20, 35), cv.FONT_HERSHEY_SIMPLEX, 0.50, (0, 255, 255), 1)
-        cv.putText(preview, "S: Save, ESC: Cancel, R: Restart", (20, 70), cv.FONT_HERSHEY_SIMPLEX, 0.50, (0, 255, 255), 1)
+        # Make photo editor instruction text fit inside the image
+        h, w = preview.shape[:2]
+
+        font = cv.FONT_HERSHEY_SIMPLEX
+        thickness = 2
+
+        line1 = "Use trackbars to edit"
+        line2 = "S: Save | ESC: Cancel | R: Restart"
+
+        scale1 = 0.55
+        while scale1 > 0.25:
+            (line1_width, line1_height), _ = cv.getTextSize(line1,font,scale1,thickness)
+
+            if line1_width <= w - 20:
+                break
+
+            scale1 -= 0.05
+
+        scale2 = 0.55
+        while scale2 > 0.25:
+            (line2_width, line2_height), _ = cv.getTextSize(line2,font,scale2,thickness)
+
+            if line2_width <= w - 20:
+                break
+
+            scale2 -= 0.05
+
+        (line1_width, line1_height), _ = cv.getTextSize(line1,font,scale1,thickness)
+
+        (line2_width, line2_height), _ = cv.getTextSize(line2,font,scale2,thickness)
+
+        # Dark rectangle behind instruction text
+        cv.rectangle(preview,(0, 0),(w, 80),(0, 0, 0),-1)
+
+        line1_x = (w - line1_width) // 2
+        line2_x = (w - line2_width) // 2
+
+        cv.putText(preview,line1,(line1_x, 30),font,scale1,(0, 255, 255),thickness)
+
+        cv.putText(preview,line2,(line2_x, 65),font,scale2,(0, 255, 255),thickness)
 
         cv.imshow(window_name, preview)
 
