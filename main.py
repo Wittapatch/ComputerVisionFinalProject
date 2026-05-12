@@ -69,38 +69,15 @@ def add_emotion_message_to_photo(photo, emotion, confidence):
     h, w = edited_photo.shape[:2]
 
     # Add dark rectangle behind text so it is readable
-    cv.rectangle(
-        edited_photo,
-        (0, h - 90),
-        (w, h),
-        (0, 0, 0),
-        -1
-    )
+    cv.rectangle(edited_photo,(0, h - 90),(w, h),(0, 0, 0),-1)
 
-    cv.putText(
-        edited_photo,
-        message,
-        (20, h - 50),
-        cv.FONT_HERSHEY_SIMPLEX,
-        0.8,
-        (0, 255, 255),
-        2
-    )
+    cv.putText(edited_photo,message,(20, h - 50),cv.FONT_HERSHEY_SIMPLEX,0.8,(0, 255, 255),2)
 
-    cv.putText(
-        edited_photo,
-        confidence_text,
-        (20, h - 20),
-        cv.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (255, 255, 255),
-        2
-    )
+    cv.putText(edited_photo,confidence_text,(20, h - 20),cv.FONT_HERSHEY_SIMPLEX,0.6,(255, 255, 255),2)
 
     return edited_photo
     
-def predict_img_xgboost(model, img,label_encoder,display_frame,player_x,player_y, label, min_conf=0.6):
-    mask = create_hand_mask(img)
+def predict_img_xgboost(model, img, mask, label_encoder,display_frame,player_x,player_y, label, min_conf=0.6):
     contour = find_hand_contour(mask)
 
     features = extract_features(contour,img)
@@ -316,10 +293,6 @@ while True:
     player1_roi = raw_frame[player1_y: player1_y + box_size, player1_x:player1_x + box_size].copy()
     player2_roi = raw_frame[player2_y: player2_y + box_size, player2_x:player2_x + box_size].copy()
 
-    player1_xgb_live, player1_xgb_live_confidence = predict_img_xgboost(xgboost_model, player1_roi, label_encoder, display_frame, player1_x, player1_y, "P1", min_conf=0.6)
-
-    player2_xgb_live, player2_xgb_live_confidence = predict_img_xgboost(xgboost_model, player2_roi, label_encoder, display_frame, player2_x, player2_y, "P2", min_conf=0.6)
-
     if use_background_mode:
         player1_mask = create_background_mask(player1_roi, player1_background)
         player2_mask = create_background_mask(player2_roi, player2_background)
@@ -327,6 +300,30 @@ while True:
         # if background mode is not active yet, then create an empty black mask
         player1_mask = np.zeros(player1_roi.shape[:2], dtype=np.uint8)
         player2_mask = np.zeros(player2_roi.shape[:2], dtype=np.uint8)
+
+    player1_xgb_live, player1_xgb_live_confidence = predict_img_xgboost(
+        xgboost_model,
+        player1_roi,
+        player1_mask,
+        label_encoder,
+        display_frame,
+        player1_x,
+        player1_y,
+        "P1",
+        min_conf=0.6
+    )
+
+    player2_xgb_live, player2_xgb_live_confidence = predict_img_xgboost(
+        xgboost_model,
+        player2_roi,
+        player2_mask,
+        label_encoder,
+        display_frame,
+        player2_x,
+        player2_y,
+        "P2",
+        min_conf=0.6
+    )
 
     # Draw boxes for each player
     # Player 1 box
@@ -403,8 +400,29 @@ while True:
                     final_player1_roi = player1_roi.copy()
                     final_player2_roi = player2_roi.copy()
 
-                    player1_xgb_gesture, player1_xgb_confidence = predict_img_xgboost(xgboost_model, final_player1_roi, label_encoder, display_frame, player1_x, player1_y, "P1", min_conf=0.6)
-                    player2_xgb_gesture, player2_xgb_confidence = predict_img_xgboost(xgboost_model, final_player2_roi, label_encoder, display_frame, player2_x, player2_y, "P2", min_conf=0.6)
+                    player1_xgb_gesture, player1_xgb_confidence = predict_img_xgboost(
+                        xgboost_model,
+                        final_player1_roi,
+                        player1_mask,
+                        label_encoder,
+                        display_frame,
+                        player1_x,
+                        player1_y,
+                        "P1",
+                        min_conf=0.6
+                    )
+                    
+                    player2_xgb_gesture, player2_xgb_confidence = predict_img_xgboost(
+                        xgboost_model,
+                        final_player2_roi,
+                        player2_mask,
+                        label_encoder,
+                        display_frame,
+                        player2_x,
+                        player2_y,
+                        "P2",
+                        min_conf=0.6
+                    )
 
                     last_player1_xgb_gesture = player1_xgb_gesture
                     last_player2_xgb_gesture = player2_xgb_gesture
