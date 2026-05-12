@@ -49,6 +49,27 @@ def extract_features(contour,roi):
     else:
         area_ratio =0
         hull_area_ratio = 0
+    perimeter = cv.arcLength(curve= contour,closed= True)
+    #Circularity is how much the contour is circular. Rock would be have higher circularity value than scissors
+    if perimeter != 0:
+        circularity = 4*np.pi *area/(perimeter**2)
+    else:
+        circularity=0
+    #Hu moments summarizes overall contour mathematically. 
+    moments = cv.moments(contour)
+    hu = cv.HuMoments(moments).flatten()
+    #These values are extremely small, so we have to log transform it first and add 10^-10 to prevent logging 0 valuue
+    hu_log = -np.sign(hu) * np.log10(np.abs(hu) + 1e-10)
+
+    #m00 is the zeroth order moment. It represents the area inside the contour
+    #m10 is the x-weighted area. It is sum of all x-positions weighted by the pixels of the contour
+    #m01 is the y-weighted area. It is the sum of all y-positions weighted by the pixels/area of the contour
+    #cx and cy represents the centroid of the contour
+    if moments["m00"] != 0:
+        cx = moments["m10"]/moments["m00"]
+        cy = moments["m01"]/moments["m00"]
+        cx_ratio = cx/roi_w
+        cy_ratio = cy/roi_h
     #Put all these features into a pandas series
     features = pd.Series({
     "defect_count": defect_count,
@@ -56,7 +77,17 @@ def extract_features(contour,roi):
     "aspect_ratio": aspect_ratio,
     "extent": extent,
     "area_ratio": area_ratio,
-    "hull_area_ratio": hull_area_ratio
+    "hull_area_ratio": hull_area_ratio,
+    "circularity":circularity,
+    "hu_log_1":hu_log[0],
+    "hu_log_2":hu_log[1],
+    "hu_log_3":hu_log[2],
+    "hu_log_4":hu_log[3],
+    "hu_log_5":hu_log[4],
+    "hu_log_6":hu_log[5],
+    "hu_log_7":hu_log[6],
+    "cx_ratio":cx_ratio,
+    "cy_ratio":cy_ratio
     })
     return features
     
