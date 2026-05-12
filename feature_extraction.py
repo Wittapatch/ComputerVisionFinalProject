@@ -1,7 +1,7 @@
 import cv2 as cv
 from contour_detection import count_defects
 import pandas as pd
-def extract_features(contour,roi_shape):
+def extract_features(contour,roi):
     """
     We want to convert one hand contour into numerical features for ML.
     
@@ -12,8 +12,8 @@ def extract_features(contour,roi_shape):
     if contour is None:
         return None
     #Get the height and width of the region of interest
-    roi_h = roi_shape[0]
-    roi_w = roi_shape[1]
+    roi_h = roi.shape[0]
+    roi_w = roi.shape[1]
     #Calculate number of pixels inside hand contour
     area = cv.contourArea(contour)
     #Return None if the area of the hand is too small
@@ -47,10 +47,14 @@ def extract_features(contour,roi_shape):
     defect_count = count_defects(contour)
     #Calculate how much of the ROI area is covered by the hand's contour area.
     #Useful for the model to understand the distance of the hand from the camera
-    area_ratio = area/(roi_w*roi_h)
+    if roi_w *roi_h!=0:
+        area_ratio = float(area/(roi_w*roi_h))
     #Measures of how much of the area of the ROI is filled by the hull area.
     #Helps measure how spread out the gesture is. For example paper may have a larger value, which rock is smaller.
-    hull_area_ratio = hull_area/(roi_w*roi_h)
+        hull_area_ratio = float(hull_area/(roi_w*roi_h))
+    else:
+        area_ratio =0
+        hull_area_ratio = 0
     #Put all these features into a pandas series
     features = pd.Series({
     "defect_count": defect_count,

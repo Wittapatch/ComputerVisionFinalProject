@@ -6,11 +6,15 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "importlib-resources>=7.1.0",
+    "ipykernel>=7.2.0",
+    "joblib>=1.5.3",
     "keras>=3.14.1",
     "numpy>=2.4.4",
     "opencv-python>=4.13.0.92",
     "pandas>=3.0.3",
+    "scikit-learn>=1.8.0",
     "tensorflow>=2.21.0",
     "tensorflow-datasets>=4.9.10",
     "ultralytics>=8.4.48",
+    "xgboost>=3.2.0",
 ]
