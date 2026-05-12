@@ -14,114 +14,59 @@ from feature_extraction import extract_features, create_hand_mask
 import pandas as pd
 import joblib
 
-def predict_face_emotion(model, face_image, min_conf=0.5):
-    # Predict emotion from a cropped face image using CNN model.
-
-    if face_image is None:
-        return "unknown", 0.0
-    
-    EMOTION_CLASSES = ["angry", "disgust", "fear", "happy", "neutral", "sad", "surprise"]
-
+def detect_rps_roi(model,display_frame,player_roi,player_x,player_y, label, min_conf=0.5):
+    CLASS_NAME = ["paper","rock",'scissors']
+    # Get CNN expected image size from the model input
     input_shape = model.input_shape
     img_height = input_shape[1]
     img_width = input_shape[2]
-    img_channels = input_shape[3]
-
-    rgb = cv.cvtColor(face_image, cv.COLOR_BGR2RGB)
-    resized = cv.resize(rgb, (img_width, img_height))
-
-    x = resized.astype("float32")
+    #Convert from BGR to RGB
+    player_roi_rgb = cv.cvtColor(player_roi,cv.COLOR_BGR2RGB)
+    #Resize the player's roi to the same size of the input shape for CNN model
+    resized_roi_rgb = cv.resize(player_roi_rgb,(img_width,img_height))
+    #Changed to float32 because it will be normalized
+    x = resized_roi_rgb.astype("float32")
+    #Dimensions are expanded because the batch size needs to be specified to the CNN model
     x = np.expand_dims(x, axis=0)
-
-    pred = model.predict(x, verbose=0)[0]
-
+    #classify the gesture of the ROI. [0] is used since the returned predictions are in batches
+    pred = model.predict(x,verbose=0)[0]
+    #Get the index position of the largest value
     class_id = int(np.argmax(pred))
     confidence = float(pred[class_id])
+    gesture = CLASS_NAME[class_id]
+    #If confidence is less than minimum confidence return unknown
+    if confidence<min_conf:
+        gesture="unknown"
+    #Put output text on the display frame
+    cv.putText(display_frame, f" {label} CNN: {gesture} {confidence:.2f}", 
+    (player_x, player_y + 250 + 70),
+    cv.FONT_HERSHEY_SIMPLEX,
+    0.6,
+    (255, 0, 0),
+    2)
+    return gesture, confidence
 
-    emotion = EMOTION_CLASSES[class_id]
-
-    if confidence < min_conf:
-        emotion = "unknown"
-
-    return emotion, confidence
-
-def add_emotion_message_to_photo(photo, emotion, confidence):
-    # Add congratulations text onto the winner photo.
-
-    edited_photo = photo.copy()
-
-    emotion_text_map = {
-        "angry": "anger",
-        "disgust": "disgust",
-        "fear": "fear",
-        "happy": "happiness",
-        "neutral": "neutral",
-        "sad": "sadness",
-        "surprise": "surprise",
-        "unknown": "mystery"
-    }
-
-    emotion_word = emotion_text_map.get(emotion, emotion)
-
-    message = f"Congratulations king of {emotion_word}"
-    confidence_text = f"Emotion: {emotion} {confidence:.2f}"
-
-    h, w = edited_photo.shape[:2]
-
-    # Add dark rectangle behind text so it is readable
-    cv.rectangle(
-        edited_photo,
-        (0, h - 90),
-        (w, h),
-        (0, 0, 0),
-        -1
-    )
-
-    cv.putText(
-        edited_photo,
-        message,
-        (20, h - 50),
-        cv.FONT_HERSHEY_SIMPLEX,
-        0.8,
-        (0, 255, 255),
-        2
-    )
-
-    cv.putText(
-        edited_photo,
-        confidence_text,
-        (20, h - 20),
-        cv.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (255, 255, 255),
-        2
-    )
-
-    return edited_photo
-    
-def predict_img_xgboost(model, img,label_encoder,display_frame,player_x,player_y, label, min_conf=0.6):
-    mask = create_hand_mask(img)
+def predict_img_xgboost(model, img,label_encoder,display_frame,player_x,player_y,mask,min_conf=0.34):
     contour = find_hand_contour(mask)
-
     features = extract_features(contour,img)
-
     if features is None:
         gesture="unknown"
         confidence =0.0
-    else:
-        # Convert one feature row into a DataFrame
-        X_one = pd.DataFrame([features])
-        pred_id = int(model.predict(X_one)[0])
-        gesture =  label_encoder.inverse_transform([pred_id])[0]
-        probs = model.predict_proba(X_one)[0]
-        confidence = float(np.max(probs))
-        if confidence<min_conf:
-            gesture="unknown"
 
-    cv.putText(display_frame,f"{label} XGB: {gesture} {confidence:.2f}",(player_x, player_y + 250 + 70), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
-
-    return gesture, confidence
-
+    # Convert one feature row into a DataFrame
+    X_one = pd.DataFrame([features])
+    pred_id = int(model.predict(X_one)[0])
+    gesture =  label_encoder.inverse_transform([pred_id])[0]
+    probs = model.predict_proba(X_one)[0]
+    confidence = float(np.max(probs))
+    if confidence<min_conf:
+        gesture="Unknown"
+    cv.putText(display_frame,f"XGB: {gesture} {confidence:.2f}",(player_x, player_y + 250 + 70),
+            cv.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 0, 255),
+            2
+        )
 #A function that detects hands for the entire screen where confidence of detected must be >50% for default confidence value
 def detect_hands_full_frame(model, frame, display_frame, conf=0.25):
     #Predict bounding box locations/hand locations using YOLO
@@ -253,11 +198,11 @@ locked_player1_gesture = "unknown"
 locked_player2_gesture = "unknown"
 locked_winner_text = "Waiting"
 validation_message = ""
-last_player1_xgb_gesture = "unknown"
-last_player2_xgb_gesture = "unknown"
-last_player1_xgb_confidence = 0.0
-last_player2_xgb_confidence = 0.0
-show_xgb_prediction = False
+last_player1_cnn_gesture = "unknown"
+last_player2_cnn_gesture = "unknown"
+last_player1_cnn_confidence = 0.0
+last_player2_cnn_confidence = 0.0
+show_cnn_prediction = False
 
 # Variables for face detection
 current_face_box = None
@@ -273,8 +218,6 @@ hand_model = YOLO("yolo_model/weights/best.pt")
 #cnn_model = keras.models.load_model("cnn_model_high_new.keras")
 xgboost_model = joblib.load("xgboost_rps.pkl")
 label_encoder = joblib.load("label_encoder.pkl")
-
-emotion_model = keras.models.load_model("cnn_model_emotion.keras")
 
 while True:
     # Read one frame from the camera
@@ -315,11 +258,7 @@ while True:
     # Crop the Region of Interest inside each box
     player1_roi = raw_frame[player1_y: player1_y + box_size, player1_x:player1_x + box_size].copy()
     player2_roi = raw_frame[player2_y: player2_y + box_size, player2_x:player2_x + box_size].copy()
-
-    player1_xgb_live, player1_xgb_live_confidence = predict_img_xgboost(xgboost_model, player1_roi, label_encoder, display_frame, player1_x, player1_y, "P1", min_conf=0.6)
-
-    player2_xgb_live, player2_xgb_live_confidence = predict_img_xgboost(xgboost_model, player2_roi, label_encoder, display_frame, player2_x, player2_y, "P2", min_conf=0.6)
-
+    predict_img_xgboost(xgboost_model,player1_roi,label_encoder,display_frame,player1_x,player1_y,player1_mask)
     if use_background_mode:
         player1_mask = create_background_mask(player1_roi, player1_background)
         player2_mask = create_background_mask(player2_roi, player2_background)
@@ -361,13 +300,33 @@ while True:
     player1_gesture = draw_gesture_on_frame(display_frame, player1_contour, player1_box, "Player1", (255, 0, 0))
     player2_gesture = draw_gesture_on_frame(display_frame, player2_contour, player2_box, "Player2", (0, 255 ,0))    
 
+    player1_cnn_gesture = "unknown"
+    player2_cnn_gesture = "unknown"
+
     # Show small mask previews inside each box
     put_mask_preview(display_frame, player1_mask, player1_box, "Player1 Mask")
     put_mask_preview(display_frame, player2_mask, player2_box, "Player2 Mask")
 
-    if show_xgb_prediction:
-        cv.putText(display_frame, f"Final P1 XGB: {last_player1_xgb_gesture} ({last_player1_xgb_confidence:.2f})", (player1_x, player1_y + box_size + 100), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
-        cv.putText(display_frame, f"Final P2 XGB: {last_player2_xgb_gesture} ({last_player2_xgb_confidence:.2f})", (player2_x, player2_y + box_size + 100), cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
+    if show_cnn_prediction:
+        cv.putText(
+            display_frame,
+            f"P1 CNN: {last_player1_cnn_gesture} ({last_player1_cnn_confidence:.2f})",
+            (player1_x, player1_y + box_size + 100),
+            cv.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 0, 255),
+            2
+        )
+
+        cv.putText(
+            display_frame,
+            f"P2 CNN: {last_player2_cnn_gesture} ({last_player2_cnn_confidence:.2f})",
+            (player2_x, player2_y + box_size + 100),
+            cv.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 0, 255),
+            2
+        )
 
 
     if not game_started:
@@ -403,20 +362,39 @@ while True:
                     final_player1_roi = player1_roi.copy()
                     final_player2_roi = player2_roi.copy()
 
-                    player1_xgb_gesture, player1_xgb_confidence = predict_img_xgboost(xgboost_model, final_player1_roi, label_encoder, display_frame, player1_x, player1_y, "P1", min_conf=0.6)
-                    player2_xgb_gesture, player2_xgb_confidence = predict_img_xgboost(xgboost_model, final_player2_roi, label_encoder, display_frame, player2_x, player2_y, "P2", min_conf=0.6)
+                    player1_cnn_gesture, player1_cnn_confidence = detect_rps_roi(
+                        cnn_model,
+                        display_frame,
+                        final_player1_roi,
+                        player1_x,
+                        player1_y,
+                        "P1",
+                        min_conf=0.5
+                    )
 
-                    last_player1_xgb_gesture = player1_xgb_gesture
-                    last_player2_xgb_gesture = player2_xgb_gesture
-                    last_player1_xgb_confidence = player1_xgb_confidence
-                    last_player2_xgb_confidence = player2_xgb_confidence
-                    show_xgb_prediction = True
+                    player2_cnn_gesture, player2_cnn_confidence = detect_rps_roi(
+                        cnn_model,
+                        display_frame,
+                        final_player2_roi,
+                        player2_x,
+                        player2_y,
+                        "P2",
+                        min_conf=0.5
+                    )
 
-                    p1_match = player1_gesture == player1_xgb_gesture
-                    p2_match = player2_gesture == player2_xgb_gesture                   
+                    # Save CNN predictions so they stay visible on screen
+                    last_player1_cnn_gesture = player1_cnn_gesture
+                    last_player2_cnn_gesture = player2_cnn_gesture
+                    last_player1_cnn_confidence = player1_cnn_confidence
+                    last_player2_cnn_confidence = player2_cnn_confidence
+                    show_cnn_prediction = True
+
+                    # Compare traditional CV result with CNN result
+                    p1_match = player1_gesture == player1_cnn_gesture
+                    p2_match = player2_gesture == player2_cnn_gesture
 
                     if not p1_match or not p2_match:
-                        validation_message = "CV and XGB don't match. Press S to play again."
+                        validation_message = "CV and CNN do not match. Press S to play again."
 
                         game_started = False
                         countdown_started = False
@@ -499,11 +477,11 @@ while True:
         locked_winner_text = "Waiting"
         validation_message = ""
 
-        show_xgb_prediction = False
-        last_player1_xgb_gesture = "unknown"
-        last_player2_xgb_gesture = "unknown"
-        last_player1_xgb_confidence = 0.0
-        last_player2_xgb_confidence = 0.0
+        show_cnn_prediction = False
+        last_player1_cnn_gesture = "unknown"
+        last_player2_cnn_gesture = "unknown"
+        last_player1_cnn_confidence = 0.0
+        last_player2_cnn_confidence = 0.0
 
         current_face_box = None
         winner_photo_path = None
@@ -521,11 +499,11 @@ while True:
             locked_winner_text = "Waiting"
             validation_message = ""
 
-            show_xgb_prediction = False
-            last_player1_xgb_gesture = "unknown"
-            last_player2_xgb_gesture = "unknown"
-            last_player1_xgb_confidence = 0.0
-            last_player2_xgb_confidence = 0.0
+            show_cnn_prediction = False
+            last_player1_cnn_gesture = "unknown"
+            last_player2_cnn_gesture = "unknown"
+            last_player1_cnn_confidence = 0.0
+            last_player2_cnn_confidence = 0.0
 
             current_face_box = None
             winner_photo_path = None
@@ -535,16 +513,7 @@ while True:
     if key == ord("p"):
         if result_locked and locked_winner_text in ["Player 1 Wins", "Player 2 Wins"]:
             full_photo = raw_frame.copy()
-
-            # Use the tracked face box to crop the winner's face for emotion prediction
-            emotion_face = crop_face(raw_frame , current_face_box, padding=30)
-
-            if emotion_face is not None:
-                emotion, emotion_confidence = predict_face_emotion(emotion_model, emotion_face, min_conf=0.5)
-                full_photo = add_emotion_message_to_photo(full_photo, emotion, emotion_confidence)
-            else: 
-                print("No face detected for emotion prediction")
-
+            
             winner_photo_path, restart_requested = open_photo_editor(full_photo, save_path="winner_full_photo.jpg")
 
             if restart_requested:
@@ -585,11 +554,6 @@ while True:
             if face_photo is None:
                 print("No face detected")
             else:
-                emotion, emotion_confidence = predict_face_emotion(emotion_model, face_photo, min_conf=0.5)
-                
-                # Put emotion messsage onto the face photo before photo editing
-                face_photo = add_emotion_message_to_photo(face_photo, emotion, emotion_confidence)
-
                 winner_photo_path, restart_requested = open_photo_editor(face_photo, save_path="winner_face_photo.jpg")
 
                 if restart_requested:
@@ -633,11 +597,11 @@ while True:
         locked_winner_text = "Waiting"
         validation_message = ""
 
-        show_xgb_prediction = False
-        last_player1_xgb_gesture = "unknown"
-        last_player2_xgb_gesture = "unknown"
-        last_player1_xgb_confidence = 0.0
-        last_player2_xgb_confidence = 0.0
+        show_cnn_prediction = False
+        last_player1_cnn_gesture = "unknown"
+        last_player2_cnn_gesture = "unknown"
+        last_player1_cnn_confidence = 0.0
+        last_player2_cnn_confidence = 0.0
 
         current_face_box = None
         winner_photo_path = None
