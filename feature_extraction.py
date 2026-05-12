@@ -1,14 +1,8 @@
 import cv2 as cv
 from contour_detection import count_defects
 import pandas as pd
+import numpy as np
 def extract_features(contour,roi):
-    """
-    We want to convert one hand contour into numerical features for ML.
-    
-    Features:
-    
-    """
-
     if contour is None:
         return None
     #Get the height and width of the region of interest
@@ -66,3 +60,20 @@ def extract_features(contour,roi):
     })
     return features
     
+def create_hand_mask(roi):
+    # Convert BGR to YCrCb color space
+    ycrcb = cv.cvtColor(roi, cv.COLOR_BGR2YCrCb)
+
+    # Skin-color range
+    lower = np.array([0, 133, 77], dtype=np.uint8)
+    upper = np.array([255, 173, 127], dtype=np.uint8)
+
+    # Create binary skin mask
+    mask = cv.inRange(ycrcb, lower, upper)
+
+    # Clean the mask
+    kernel = np.ones((5, 5), dtype=np.uint8)
+    mask = cv.morphologyEx(mask, cv.MORPH_OPEN, kernel)
+    mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel)
+
+    return mask

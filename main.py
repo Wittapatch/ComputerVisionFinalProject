@@ -10,7 +10,9 @@ from winner_screen import show_winner_screen
 from face_tracking import create_face_tracker, initialize_face_tracker, update_face_tracker, reset_face_tracker
 from ultralytics import YOLO
 from tensorflow import keras
-
+from feature_extraction import extract_features, create_hand_mask
+import pandas as pd
+import joblib
 
 def detect_rps_roi(model,display_frame,player_roi,player_x,player_y, label, min_conf=0.5):
     CLASS_NAME = ["paper","rock",'scissors']
@@ -44,6 +46,28 @@ def detect_rps_roi(model,display_frame,player_roi,player_x,player_y, label, min_
     2)
     return gesture, confidence
 
+def predict_img_xgboost(model, img,label_encoder,display_frame,player_x,player_y,min_conf=0.6):
+    mask = create_hand_mask(img)
+    contour = find_hand_contour(mask)
+    features = extract_features(contour,img)
+    if features is None:
+        gesture="unknown"
+        confidence =0.0
+
+    # Convert one feature row into a DataFrame
+    X_one = pd.DataFrame([features])
+    pred_id = int(model.predict(X_one)[0])
+    gesture =  label_encoder.inverse_transform([pred_id])[0]
+    probs = model.predict_proba(X_one)[0]
+    confidence = float(np.max(probs))
+    if confidence<min_conf:
+        gesture="Unknown"
+    cv.putText(display_frame,f"XGB: {gesture} {confidence:.2f}",(player_x, player_y + 250 + 70),
+            cv.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 0, 255),
+            2
+        )
 #A function that detects hands for the entire screen where confidence of detected must be >50% for default confidence value
 def detect_hands_full_frame(model, frame, display_frame, conf=0.25):
     #Predict bounding box locations/hand locations using YOLO
@@ -192,7 +216,9 @@ face_tracker = create_face_tracker()
 hand_model = YOLO("yolo_model/weights/best.pt")
 
 #Get CNN model
-cnn_model = keras.models.load_model("cnn_model_high_new.keras")
+#cnn_model = keras.models.load_model("cnn_model_high_new.keras")
+xgboost_model = joblib.load("xgboost_rps.pkl")
+label_encoder = joblib.load("label_encoder.pkl")
 
 while True:
     # Read one frame from the camera
@@ -233,6 +259,8 @@ while True:
     # Crop the Region of Interest inside each box
     player1_roi = raw_frame[player1_y: player1_y + box_size, player1_x:player1_x + box_size].copy()
     player2_roi = raw_frame[player2_y: player2_y + box_size, player2_x:player2_x + box_size].copy()
+
+    predict_img_xgboost(xgboost_model,player1_roi,label_encoder,display_frame,player1_x,player1_y)
 
     if use_background_mode:
         player1_mask = create_background_mask(player1_roi, player1_background)
