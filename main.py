@@ -46,8 +46,7 @@ def detect_rps_roi(model,display_frame,player_roi,player_x,player_y, label, min_
     2)
     return gesture, confidence
 
-def predict_img_xgboost(model, img,label_encoder,display_frame,player_x,player_y,min_conf=0.6):
-    mask = create_hand_mask(img)
+def predict_img_xgboost(model, img,label_encoder,display_frame,player_x,player_y,mask,min_conf=0.34):
     contour = find_hand_contour(mask)
     features = extract_features(contour,img)
     if features is None:
@@ -55,13 +54,14 @@ def predict_img_xgboost(model, img,label_encoder,display_frame,player_x,player_y
         confidence =0.0
 
     # Convert one feature row into a DataFrame
-    X_one = pd.DataFrame([features])
-    pred_id = int(model.predict(X_one)[0])
-    gesture =  label_encoder.inverse_transform([pred_id])[0]
-    probs = model.predict_proba(X_one)[0]
-    confidence = float(np.max(probs))
-    if confidence<min_conf:
-        gesture="Unknown"
+    else:
+        X_one = pd.DataFrame([features])
+        pred_id = int(model.predict(X_one)[0])
+        gesture =  label_encoder.inverse_transform([pred_id])[0]
+        probs = model.predict_proba(X_one)[0]
+        confidence = float(np.max(probs))
+        if confidence<min_conf:
+            gesture="Unknown"
     cv.putText(display_frame,f"XGB: {gesture} {confidence:.2f}",(player_x, player_y + 250 + 70),
             cv.FONT_HERSHEY_SIMPLEX,
             0.6,
@@ -260,11 +260,12 @@ while True:
     player1_roi = raw_frame[player1_y: player1_y + box_size, player1_x:player1_x + box_size].copy()
     player2_roi = raw_frame[player2_y: player2_y + box_size, player2_x:player2_x + box_size].copy()
 
-    predict_img_xgboost(xgboost_model,player1_roi,label_encoder,display_frame,player1_x,player1_y)
 
     if use_background_mode:
         player1_mask = create_background_mask(player1_roi, player1_background)
         player2_mask = create_background_mask(player2_roi, player2_background)
+        predict_img_xgboost(xgboost_model,player1_roi,label_encoder,display_frame,player1_x,player1_y,player1_mask)
+
     else:
         # if background mode is not active yet, then create an empty black mask
         player1_mask = np.zeros(player1_roi.shape[:2], dtype=np.uint8)
