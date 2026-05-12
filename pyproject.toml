@@ -9,6 +9,7 @@ dependencies = [
     "keras>=3.14.1",
     "numpy>=2.4.4",
     "opencv-python>=4.13.0.92",
+    "pandas>=3.0.3",
     "tensorflow>=2.21.0",
     "tensorflow-datasets>=4.9.10",
     "ultralytics>=8.4.48",
