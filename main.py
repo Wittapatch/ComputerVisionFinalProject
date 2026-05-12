@@ -333,7 +333,7 @@ while True:
 
 
     if not game_started:
-        cv.putText(display_frame, "B: Get background, S: Start Game, R: Restart Game", (40, height-40), cv.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
+        cv.putText(display_frame, "B: Get background, S: Start Game, R: Restart Game", (40, height-20), cv.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
         if validation_message != "":
             winner_text = validation_message
         else:
